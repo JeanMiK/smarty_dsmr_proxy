@@ -44,7 +44,7 @@ class MqttRetained:
                   userdata.energyAtStartOfDay=float(msg.payload)
                   userdata.received[2]=True
                elif msg.topic == MqttRetained.topics[3]:
-                  userdata.currentDate=msg.payload
+                  userdata.currentDate=msg.payload.decode('utf-8')
                   userdata.received[3]=True
             else:
                print("Message received for topic ", msg.topic, " after initialization phase")
@@ -55,17 +55,20 @@ class MqttRetained:
         time.sleep(5)
         self.lock.acquire()
         self.allowUpdate=False
+        print("PowerMax=[", self.powerMax, "], powerMaxCurrentDay=[", self.powerMaxCurrentDay,
+              "], energyAtStartOfDay=[", self.energyAtStartOfDay, "], currentDate=[", self.currentDate,
+              "]", sep='')
         self.mqttClient.unsubscribe(MqttRetained.topics)
         self.lock.release()
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, props):
     print("Connected with result code " + str(rc))
     if  userdata == None:
         pass
-    elif userdata.allowUpdate == True:
+    elif userdata.allowUpdate == True and rc == 0:
         client.subscribe([(x,0) for x in MqttRetained.topics])
 
-client = mqtt.Client()
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.on_connect = on_connect
 
 retained = MqttRetained(client)
@@ -94,7 +97,7 @@ def read_and_publish_SolarEdge(retained):
     address = 40000
     count = 109
     # result = client.read_holding_registers(address, count,  unit=1)
-    result = client.read_holding_registers(address=40000, count=109)
+    result = client.read_holding_registers(address=address, count=count)
     client.close()
 
     print("-" * 60)
@@ -277,6 +280,7 @@ def read_and_publish_SolarEdge(retained):
 
 
     if retained.newDay:
+        print("Publishing new date [", retained.currentDate, "]", sep='')
         retained.mqttClient.publish("SolarEdge/CurrentDate", retained.currentDate, retain=True)
         retained.newDay=False
 
@@ -287,7 +291,7 @@ while True:
     now=date.today().strftime('%Y-%m-%d')
     if retained.currentDate != now:
         print("-"*60)
-        print("Observed a change of day from '", retained.currentDate, "' to '",now,"'", sep='')
+        print("Observed a change of day from [", retained.currentDate, "] to [",now,"]", sep='')
         retained.currentDate = now
         retained.newDay=True;
 
