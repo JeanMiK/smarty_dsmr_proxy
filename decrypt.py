@@ -39,6 +39,7 @@ class SmartyProxy():
 
         # Serial connection from which we read the data from the smart meter
         self._connection = None
+        self._raw_out  = None
 
         # Initial empty values. These will be filled as content is read
         # and they will be reset each time we go back to the initial state.
@@ -59,6 +60,7 @@ class SmartyProxy():
         parser.add_argument('key', help="Decryption key")
         parser.add_argument('-i', '--serial-input-port', required=False, default="/dev/ttyUSB0", help="Input port. Defaults to /dev/ttyUSB0.")
         parser.add_argument('-o', '--serial-output-port', required=False, help="Output port, e.g. /dev/pts/2.")
+        parser.add_argument('-r', '--raw-serial-output-port', required=False, help="Raw Output port, e.g. /dev/pts/3.")
         self._args = parser.parse_args()
 
         self.connect()
@@ -77,12 +79,27 @@ class SmartyProxy():
         except (serial.SerialException, OSError) as err:
             print("ERROR")
 
+        if self._args.raw_serial_output_port:
+            try:
+                self._raw_out = serial.Serial(
+                    port=self._args.raw_serial_output_port,
+                    baudrate=115200,
+                    parity=serial.PARITY_NONE,
+                    stopbits=serial.STOPBITS_ONE,
+                )
+            except (serial.SerialException, OSError) as err:
+                print("ERROR on raw-serial-output-port")
+
     # Start processing incoming data
     def process(self):
         try:
             raw_data = self._connection.read()
         except serial.SerialException:
             return
+
+        # Copy to raw output
+        if self._raw_out != None:
+            self._raw_out.write(raw_data)
 
         # Read and parse the stream from the serial port byte by byte.
         # This parsing works as a state machine (see the definitions in the __init__ method).
